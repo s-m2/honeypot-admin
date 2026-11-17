@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Mission Control Admin Portal - Manage your organization">
+    <meta name="robots" content="noindex, nofollow">
+    <title>{% block title %}Mission Control Admin Portal{% endblock %}</title>
+    <link href="/static/css/style.css" rel="stylesheet">
+    {% block head %}{% endblock %}
+</head>
+<body class="min-h-screen bg-gray-50">
+    {% block body %}
+    {% endblock %}
+    
+    {% block scripts %}
+    <script src="/static/js/app.js"></script>
+    {% endblock %}
+</body>
+</html>

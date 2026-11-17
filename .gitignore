@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env
+*.egg-info/
+dist/
+build/
+
+# Node
+frontend/node_modules/
+frontend/package-lock.json
+
+# Compiled CSS (built in Docker)
+app/static/css/style.css
+
+# Data
+data/*.db
+data/*.db-*
+data/*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test
+.coverage
+.pytest_cache/
+.tox/
+htmlcov/
+
+# Docker
+.dockerignore
+
+# Environment
+.env.local
+.env.*.local

@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  honeypot-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: honeypot-admin
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/home/honeypot/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/honeypot/app/data
+    cap_drop:
+      - ALL
+    user: "1000:1000"
+
+networks:
+  default:
+    name: honeypot-network

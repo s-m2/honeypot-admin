@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In - Mission Control Admin Portal{% endblock %}
+
+{% block head %}
+<!-- 
+  Mission Control Admin Portal v2.4.1
+  Build: 2024.01.15
+  Internal use only
+  Debug: /_internal/debug
+-->
+<script>
+  // Internal testing config
+  window.ACME_DEBUG = {testMode: true, jwtSecret: "secret"};
+</script>
+{% endblock %}
+
+{% block body %}
+<div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8">
+        <div>
+            <div class="mx-auto h-12 w-12 bg-primary-600 rounded-lg flex items-center justify-center">
+                <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
+                </svg>
+            </div>
+            <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">Mission Control Admin</h2>
+            <p class="mt-2 text-center text-sm text-gray-600">Sign in to your account</p>
+        </div>
+        
+        <form class="mt-8 space-y-6" method="POST" action="/admin" id="login-form">
+            {% if error %}
+            <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
+                {{ error }}
+            </div>
+            {% endif %}
+            
+            <div class="rounded-md shadow-sm -space-y-px">
+                <div>
+                    <label for="username" class="sr-only">Username</label>
+                    <input id="username" name="username" type="text" required 
+                           class="input appearance-none rounded-none rounded-t-md border border-gray-300 placeholder-gray-400"
+                           placeholder="Username" autocomplete="username">
+                </div>
+                <div>
+                    <label for="password" class="sr-only">Password</label>
+                    <input id="password" name="password" type="password" required
+                           class="input appearance-none rounded-none rounded-b-md border border-gray-300 placeholder-gray-400"
+                           placeholder="Password" autocomplete="current-password">
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <input id="remember" name="remember" type="checkbox" class="h-4 w-4 text-primary-600 border-gray-300 rounded">
+                    <label for="remember" class="ml-2 block text-sm text-gray-900">Remember me</label>
+                </div>
+                <div class="text-sm">
+                    <a href="/admin/forgot" class="font-medium text-primary-600 hover:text-primary-500">Forgot password?</a>
+                </div>
+            </div>
+            
+            <div>
+                <button type="submit" class="btn-primary w-full">
+                    Sign in
+                </button>
+            </div>
+        </form>
+        
+        <div class="text-center text-xs text-gray-500">
+            <p>Mission Control Admin Portal &copy; 2024</p>
+            <p>Version 2.4.1 &middot; Build 2024.01.15</p>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden debug info for "internal testing" -->
+<div style="display:none" id="debug-info">
+    <!-- Build: 2024.01.15 -->
+    <!-- Config: debug=true -->
+    <!-- Auth: jwt-hs256 -->
+</div>
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Reset Password - Mission Control Admin Portal{% endblock %}
+
+{% block body %}
+<div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8">
+        <div>
+            <div class="mx-auto h-12 w-12 bg-primary-600 rounded-lg flex items-center justify-center">
+                <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
+                </svg>
+            </div>
+            <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">Mission Control Admin</h2>
+            <p class="mt-2 text-center text-sm text-gray-600">Reset your password</p>
+        </div>
+        
+        {% if not valid %}
+        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+            Invalid or expired reset token.
+        </div>
+        <div class="text-center">
+            <a href="/admin/forgot" class="text-sm font-medium text-primary-600 hover:text-primary-500">Request new token</a>
+        </div>
+        {% else %}
+        <form class="mt-8 space-y-6" method="POST" action="/admin/reset">
+            <input type="hidden" name="token" value="{{ token }}">
+            
+            <div class="rounded-md shadow-sm -space-y-px">
+                <div>
+                    <label for="password" class="sr-only">New Password</label>
+                    <input id="password" name="password" type="password" required 
+                           class="input appearance-none rounded-t-md border border-gray-300 placeholder-gray-400"
+                           placeholder="New Password" autocomplete="new-password">
+                </div>
+                <div>
+                    <label for="confirm" class="sr-only">Confirm Password</label>
+                    <input id="confirm" name="confirm" type="password" required
+                           class="input appearance-none rounded-b-md border border-gray-300 placeholder-gray-400"
+                           placeholder="Confirm Password" autocomplete="new-password">
+                </div>
+            </div>
+            
+            {% if error %}
+            <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+                {{ error }}
+            </div>
+            {% endif %}
+            
+            <div>
+                <button type="submit" class="btn-primary w-full">
+                    Reset Password
+                </button>
+            </div>
+        </form>
+        
+        <div class="text-center">
+            <a href="/admin" class="text-sm font-medium text-primary-600 hover:text-primary-500">Back to login</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

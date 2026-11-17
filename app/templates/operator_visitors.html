@@ -1,0 +1,96 @@
+{% extends "dashboard.html" %}
+
+{% block title %}Visitor Log - Mission Control{% endblock %}
+
+{% block dashboard_content %}
+<div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-900">Visitor Log</h2>
+            <p class="text-gray-500 mt-1">{{ total }} total entries</p>
+        </div>
+        <a href="/admin/operator/export?format=json" class="btn-secondary">
+            <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+            Export JSON
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="card p-4 mb-6">
+        <div class="flex flex-wrap gap-4">
+            <a href="/admin/operator/visitors?filter_type=all" class="px-4 py-2 rounded {% if filter_type == 'all' %}bg-primary-100 text-primary-700{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">All</a>
+            <a href="/admin/operator/visitors?filter_type=trap_hits" class="px-4 py-2 rounded {% if filter_type == 'trap_hits' %}bg-primary-100 text-primary-700{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">Trap Hits</a>
+            <a href="/admin/operator/visitors?filter_type=login" class="px-4 py-2 rounded {% if filter_type == 'login' %}bg-primary-100 text-primary-700{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">Login Attempts</a>
+            <a href="/admin/operator/visitors?filter_type=guestbook" class="px-4 py-2 rounded {% if filter_type == 'guestbook' %}bg-primary-100 text-primary-700{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">Guestbook</a>
+            <a href="/admin/operator/visitors?filter_type=ai_detected" class="px-4 py-2 rounded {% if filter_type == 'ai_detected' %}bg-primary-100 text-primary-700{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">AI Detected</a>
+        </div>
+    </div>
+
+    {% if visitors %}
+    <div class="card overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User Agent</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for visitor in visitors %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ visitor.created_at }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% set evt = visitor.parsed_data %}
+                        <span class="px-2 py-1 text-xs font-medium rounded-full
+                            {% if visitor.event_type == 'fake_endpoint_access' %}bg-red-100 text-red-800
+                            {% elif visitor.event_type == 'login_attempt' %}bg-blue-100 text-blue-800
+                            {% elif visitor.event_type == 'guestbook_entry' %}bg-green-100 text-green-800
+                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                            {{ visitor.event_type }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">{{ evt.ip if evt.ip else 'unknown' }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700 max-w-md">
+                        {% if visitor.event_type == 'fake_endpoint_access' %}
+                            Trap: {{ evt.endpoint }} ({{ evt.method }})
+                        {% elif visitor.event_type == 'login_attempt' %}
+                            {{ evt.username }} - {{ evt.result }}
+                        {% elif visitor.event_type == 'guestbook_entry' %}
+                            <div class="font-medium">{{ evt.name }} (AI: {{ evt.ai_score }}%)</div>
+                            <div class="text-sm text-gray-600 whitespace-pre-wrap break-words mt-1">{{ evt.message }}</div>
+                        {% else %}
+                            {{ visitor.event_type }}
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{{ evt.user_agent[:60] if evt.user_agent else 'unknown' }}{% if evt.user_agent and evt.user_agent|length > 60 %}...{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="mt-6 flex items-center justify-center space-x-2">
+        {% if page > 1 %}
+        <a href="/admin/operator/visitors?page={{ page - 1 }}&filter_type={{ filter_type }}" class="btn-secondary">Previous</a>
+        {% endif %}
+        <span class="px-4 py-2 text-sm text-gray-700">Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="/admin/operator/visitors?page={{ page + 1 }}&filter_type={{ filter_type }}" class="btn-secondary">Next</a>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="card p-12 text-center">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        <h3 class="mt-2 text-lg font-medium text-gray-900">No entries</h3>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
