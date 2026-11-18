@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, Response, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 import secrets
 from .auth import (
@@ -17,6 +18,9 @@ from .operator import router as operator_router
 
 
 app = FastAPI(title="Mission Control Admin Portal")
+
+# Trust your domain and localhost
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["reburner.io", "www.reburner.io", "localhost", "127.0.0.1"])
 
 # Session middleware (weak secret)
 app.add_middleware(SessionMiddleware, secret_key="weak-session-secret-2024")
