@@ -93,15 +93,20 @@ def get_current_user(request: Request) -> Optional[dict]:
     return dict(user) if user else None
 
 
-def login_user(response: Response, username: str, is_admin: bool = False) -> str:
+def login_user(response: Response, username: str, is_admin: bool = False, request: Request = None) -> str:
     token = create_token(username, is_admin)
     sessions[token] = {"username": username, "is_admin": is_admin, "login_time": datetime.utcnow()}
+    
+    # Determine secure flag from request scheme (for HTTPS behind proxy)
+    secure = False
+    if request and request.url.scheme == "https":
+        secure = True
     
     response.set_cookie(
         key="session",
         value=token,
         httponly=True,
-        secure=False,  # Intentionally False for local dev
+        secure=secure,
         samesite="lax",
         max_age=TOKEN_EXPIRE_HOURS * 3600,
     )

@@ -7,6 +7,17 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 import secrets
 
+from .auth import (
+    authenticate, login_user, logout_user, get_current_user,
+    check_rate_limit, generate_reset_token, verify_reset_token, use_reset_token,
+    log_login_attempt
+)
+from .guestbook import (
+    add_entry, get_entries, get_all_entries, get_trap_content, can_post
+)
+from .traps.endpoints import router as traps_router
+from .operator import router as operator_router
+
 
 class ProxyHeadersMiddleware:
     """Handle X-Forwarded-Proto header for HTTPS detection behind reverse proxy"""
@@ -39,16 +50,6 @@ class ProxyHeadersMiddleware:
                         break
         
         await self.app(scope, receive, send)
-from .auth import (
-    authenticate, login_user, logout_user, get_current_user,
-    check_rate_limit, generate_reset_token, verify_reset_token, use_reset_token,
-    log_login_attempt
-)
-from .guestbook import (
-    add_entry, get_entries, get_all_entries, get_trap_content, can_post
-)
-from .traps.endpoints import router as traps_router
-from .operator import router as operator_router
 
 
 app = FastAPI(title="Mission Control Admin Portal")
@@ -131,7 +132,7 @@ async def admin_login_post(
     if user:
         log_login_attempt(client_ip, username, "success", user_agent)
         response = RedirectResponse(url="/admin/dashboard", status_code=302)
-        token = login_user(response, user["username"], user["is_admin"])
+        token = login_user(response, user["username"], user["is_admin"], request=request)
         response.headers["X-Session-Token"] = token  # Leak token in header (vuln)
         return response
     
@@ -179,7 +180,7 @@ async def reset_password(request: Request, token: str = ""):
 @app.post("/admin/reset", response_class=HTMLResponse)
 async def reset_password_post(request: Request, token: str = Form(...), password: str = Form(...)):
     """Use reset token"""
-    if use_reset_token(token, password):
+    if use_reset_token(token, new_password=password):
         return RedirectResponse(url="/admin?reset=success", status_code=302)
     return templates.TemplateResponse("reset.html", {
         "request": request,
