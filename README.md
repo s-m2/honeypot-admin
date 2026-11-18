@@ -1,7 +1,7 @@
 # Honeypot Admin
 
 > ⚠️ **FOR ENTERTAINMENT PURPOSES ONLY**
-> 
+>
 > This is a research honeypot designed to study automated attackers and AI agents.
 > Do not deploy in production environments. Deploy at your own risk.
 
@@ -28,7 +28,6 @@ A deceptive admin panel honeypot that presents as a legitimate corporate SaaS da
 - **Operator viewer** (`/admin/guestbook/view`) - hidden page to monitor entries
 - **SQLite storage** with constraints: one entry per IP (24hr cooldown), 500 char limit, 10MB DB cap
 - **Rootless Docker deployment** (multi-stage build, UID 1000, read-only FS)
-- **AGPL-3.0 licensed** with source link on guestbook page
 
 ## Quick Start
 
@@ -63,15 +62,15 @@ honeypot-admin/
 
 ## Vulnerabilities (Intentional)
 
-| Vulnerability | Location | Difficulty |
-|---------------|----------|------------|
-| Debug credentials | JS global (`window.__MISSION_DEBUG__`) | Trivial |
-| SQL Injection | `/admin` username field | Easy |
-| Weak JWT secret | `secret` + `none` alg | Easy |
-| Token in header | `X-Session-Token` | Trivial |
-| Username enumeration | Login timing | Medium |
-| Predictable reset token | `/admin/forgot` | Easy |
-| Algorithm confusion | JWT decode accepts `none` | Medium |
+| Vulnerability           | Location                               | Difficulty |
+| ----------------------- | -------------------------------------- | ---------- |
+| Debug credentials       | JS global (`window.__MISSION_DEBUG__`) | Trivial    |
+| SQL Injection           | `/admin` username field                | Easy       |
+| Weak JWT secret         | `secret` + `none` alg                  | Easy       |
+| Token in header         | `X-Session-Token`                      | Trivial    |
+| Username enumeration    | Login timing                           | Medium     |
+| Predictable reset token | `/admin/forgot`                        | Easy       |
+| Algorithm confusion     | JWT decode accepts `none`              | Medium     |
 
 ## AI Traps
 
@@ -86,9 +85,7 @@ The guestbook page includes multiple layers designed to elicit information from 
 
 ## License
 
-AGPL-3.0 — See [LICENSE](LICENSE). 
-
-Source: [GitHub](https://github.com/youruser/honeypot-admin)
+MIT — See [LICENSE](LICENSE).
 
 ---
 

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   honeypot-admin:
     build:
@@ -19,7 +17,6 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /home/honeypot/app/data
     cap_drop:
       - ALL
     user: "1000:1000"
