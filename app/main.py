@@ -4,7 +4,41 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 import secrets
+
+
+class ProxyHeadersMiddleware:
+    """Handle X-Forwarded-Proto header for HTTPS detection behind reverse proxy"""
+    
+    def __init__(self, app: ASGIApp, trusted_hosts: str = "*"):
+        self.app = app
+        self.trusted_hosts = trusted_hosts
+    
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] in ("http", "websocket"):
+            headers = dict(scope.get("headers", []))
+            # Check X-Forwarded-Proto header (set by nginx)
+            forwarded_proto = headers.get(b"x-forwarded-proto")
+            if forwarded_proto:
+                # Take the first protocol if comma-separated
+                proto = forwarded_proto.decode("latin-1").split(",")[0].strip()
+                if proto in ("https", "http"):
+                    scope["scheme"] = proto
+            
+            # Also handle Forwarded header (RFC 7239)
+            forwarded = headers.get(b"forwarded")
+            if forwarded:
+                # Parse Forwarded: for=1.2.3.4;proto=https;host=example.com
+                for part in forwarded.decode("latin-1").split(";"):
+                    part = part.strip()
+                    if part.startswith("proto="):
+                        proto = part[6:].strip().strip('"')
+                        if proto in ("https", "http"):
+                            scope["scheme"] = proto
+                        break
+        
+        await self.app(scope, receive, send)
 from .auth import (
     authenticate, login_user, logout_user, get_current_user,
     check_rate_limit, generate_reset_token, verify_reset_token, use_reset_token,
@@ -18,6 +52,9 @@ from .operator import router as operator_router
 
 
 app = FastAPI(title="Mission Control Admin Portal")
+
+# Handle X-Forwarded-Proto for HTTPS detection behind reverse proxy (must be first)
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 # Trust your domain and localhost
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["reburner.io", "www.reburner.io", "localhost", "127.0.0.1"])
