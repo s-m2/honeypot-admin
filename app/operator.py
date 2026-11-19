@@ -3,7 +3,7 @@ Operator Dashboard - Hidden analytics for honeypot operator
 Not linked anywhere, only accessible via obscure path
 """
 from fastapi import APIRouter, Request, Depends, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from typing import Optional
 from datetime import datetime, timedelta
@@ -15,6 +15,7 @@ from .auth import get_current_user
 from .traps.endpoints import fake_endpoint_logs, get_fake_logs
 from .guestbook import get_all_entries
 from .traps.markers import calculate_ai_score
+from .scoring import get_scoring_engine
 
 router = APIRouter(prefix="/admin/operator", tags=[], include_in_schema=False)
 templates = Jinja2Templates(directory="app/templates")
@@ -87,6 +88,16 @@ async def operator_timeline(
     })
 
 
+@router.get("/scoring", response_class=HTMLResponse)
+async def operator_scoring(request: Request, user: dict = Depends(require_operator)):
+    """Behavioral scoring & attack chain visualization"""
+    return templates.TemplateResponse("operator_scoring.html", {
+        "request": request,
+        "user": user,
+        "page": "scoring",
+    })
+
+
 @router.get("/export")
 async def operator_export(request: Request, user: dict = Depends(require_operator), format: str = "json"):
     """Export all data"""
@@ -97,6 +108,7 @@ async def operator_export(request: Request, user: dict = Depends(require_operato
         "guestbook": get_all_entries(),
         "fake_endpoint_logs": get_fake_logs(1000),
         "trap_triggers": get_trap_trigger_details(),
+        "behavioral_scoring": get_behavioral_scoring_summary(),
     }
     if format == "json":
         return JSONResponse(content=data)
@@ -105,6 +117,206 @@ async def operator_export(request: Request, user: dict = Depends(require_operato
         "user": user,
         "data": json.dumps(data, indent=2),
     })
+
+
+# Behavioral Scoring API Endpoints
+
+@router.get("/scoring/sessions")
+async def scoring_sessions(request: Request, user: dict = Depends(require_operator), min_score: int = 0):
+    """Get all scored sessions"""
+    engine = get_scoring_engine()
+    sessions = engine.get_all_sessions()
+    if min_score > 0:
+        sessions = [s for s in sessions if s.total_score >= min_score]
+    return JSONResponse(content=[s.to_dict() for s in sessions])
+
+
+@router.get("/scoring/sessions/{correlation_id}")
+async def scoring_session_detail(request: Request, correlation_id: str, user: dict = Depends(require_operator)):
+    """Get detailed session by correlation ID"""
+    engine = get_scoring_engine()
+    session = engine.get_session(correlation_id)
+    if not session:
+        return JSONResponse(content={"error": "Session not found"}, status_code=404)
+    return JSONResponse(content=session.to_dict())
+
+
+@router.get("/scoring/high-risk")
+async def scoring_high_risk(request: Request, user: dict = Depends(require_operator), min_score: int = 50):
+    """Get high-risk sessions"""
+    engine = get_scoring_engine()
+    sessions = engine.get_high_risk_sessions(min_score)
+    return JSONResponse(content=[s.to_dict() for s in sessions])
+
+
+@router.get("/scoring/attack-chains")
+async def scoring_attack_chains(request: Request, user: dict = Depends(require_operator)):
+    """Get attack chain summary"""
+    engine = get_scoring_engine()
+    summary = engine.get_attack_chain_summary()
+    return JSONResponse(content=summary)
+
+
+@router.get("/scoring/ip-summary")
+async def scoring_ip_summary(request: Request, user: dict = Depends(require_operator)):
+    """Get IP-based summary"""
+    engine = get_scoring_engine()
+    summary = engine.get_ip_summary()
+    return JSONResponse(content=summary)
+
+
+# Export Endpoints
+
+@router.get("/export/sessions.csv")
+async def export_sessions_csv(request: Request, user: dict = Depends(require_operator), min_score: int = 0):
+    """Export sessions as CSV"""
+    engine = get_scoring_engine()
+    sessions = engine.get_all_sessions()
+    if min_score > 0:
+        sessions = [s for s in sessions if s.total_score >= min_score]
+    
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Correlation ID", "IP", "First Seen", "Last Seen", "Event Count",
+        "Total Score", "Attack Chains", "Top Scores"
+    ])
+    for s in sessions:
+        writer.writerow([
+            s.correlation_id,
+            s.ip,
+            datetime.fromtimestamp(s.first_seen).isoformat(),
+            datetime.fromtimestamp(s.last_seen).isoformat(),
+            s.event_count,
+            s.total_score,
+            "; ".join(s.attack_chains),
+            "; ".join(f"{k}:{v}" for k, v in sorted(s.scores.items(), key=lambda x: -x[1])[:5])
+        ])
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=sessions_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+
+@router.get("/export/attack-chains.csv")
+async def export_attack_chains_csv(request: Request, user: dict = Depends(require_operator)):
+    """Export attack chain summary as CSV"""
+    engine = get_scoring_engine()
+    summary = engine.get_attack_chain_summary()
+    
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Attack Chain", "Session Count"])
+    for chain, count in sorted(summary.items(), key=lambda x: -x[1]):
+        writer.writerow([chain, count])
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=attack_chains_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+
+@router.get("/export/ip-summary.csv")
+async def export_ip_summary_csv(request: Request, user: dict = Depends(require_operator)):
+    """Export IP summary as CSV"""
+    engine = get_scoring_engine()
+    summary = engine.get_ip_summary()
+    
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "IP", "Total Score", "Event Count", "Session Count",
+        "Attack Chains", "First Seen", "Last Seen"
+    ])
+    for ip, data in sorted(summary.items(), key=lambda x: -x[1]["total_score"]):
+        writer.writerow([
+            ip,
+            data["total_score"],
+            data["event_count"],
+            data["sessions"],
+            "; ".join(data["attack_chains"]),
+            datetime.fromtimestamp(data["first_seen"]).isoformat() if data["first_seen"] > 0 else "",
+            datetime.fromtimestamp(data["last_seen"]).isoformat() if data["last_seen"] > 0 else "",
+        ])
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=ip_summary_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+
+@router.get("/export/events.csv")
+async def export_events_csv(request: Request, user: dict = Depends(require_operator), hours: int = 24):
+    """Export raw analytics events as CSV"""
+    since = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+    
+    with db_cursor() as cur:
+        cur.execute("""
+            SELECT * FROM analytics_events 
+            WHERE created_at > ?
+            ORDER BY created_at ASC
+        """, (since,))
+        events = [dict(row) for row in cur.fetchall()]
+    
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "ID", "Event Type", "Correlation ID", "Created At", "IP", "Username", "Result",
+        "Endpoint", "User Agent", "AI Score", "Threat Score", "Country", "ASN"
+    ])
+    
+    for e in events:
+        try:
+            data = json.loads(e["event_data"]) if e["event_data"] else {}
+        except:
+            data = {}
+        
+        enrichment = data.get("ip_enrichment", {})
+        writer.writerow([
+            e["id"],
+            e["event_type"],
+            e["correlation_id"] or "",
+            e["created_at"],
+            data.get("ip", ""),
+            data.get("username", ""),
+            data.get("result", ""),
+            data.get("endpoint", ""),
+            data.get("user_agent", "")[:100],
+            data.get("ai_score", ""),
+            enrichment.get("threat_score", ""),
+            enrichment.get("country", ""),
+            enrichment.get("asn_name", ""),
+        ])
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=events_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+
+def get_behavioral_scoring_summary() -> dict:
+    """Get behavioral scoring summary for export"""
+    engine = get_scoring_engine()
+    return {
+        "total_sessions": len(engine.sessions),
+        "high_risk_sessions": len(engine.get_high_risk_sessions(50)),
+        "attack_chains": engine.get_attack_chain_summary(),
+        "ip_summary": engine.get_ip_summary(),
+        "top_sessions": [s.to_dict() for s in engine.get_all_sessions()[:20]],
+    }
 
 
 def get_operator_stats() -> dict:

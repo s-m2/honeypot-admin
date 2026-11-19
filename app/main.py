@@ -52,10 +52,48 @@ class ProxyHeadersMiddleware:
         await self.app(scope, receive, send)
 
 
+class CorrelationIdMiddleware:
+    """Generate and propagate correlation IDs for request tracking"""
+    
+    def __init__(self, app: ASGIApp):
+        self.app = app
+    
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] in ("http", "websocket"):
+            headers = dict(scope.get("headers", []))
+            # Check for incoming correlation ID
+            correlation_id = headers.get(b"x-correlation-id")
+            if not correlation_id:
+                correlation_id = headers.get(b"x-request-id")
+            if correlation_id:
+                correlation_id = correlation_id.decode("latin-1")
+            else:
+                correlation_id = secrets.token_hex(16)
+            
+            # Store in scope state for access in route handlers
+            scope["state"] = scope.get("state", {})
+            scope["state"]["correlation_id"] = correlation_id
+            
+            # Wrap send to add correlation ID to response headers
+            async def send_wrapper(message):
+                if message["type"] == "http.response.start":
+                    headers = list(message.get("headers", []))
+                    headers.append((b"x-correlation-id", correlation_id.encode("latin-1")))
+                    message["headers"] = headers
+                await send(message)
+            
+            await self.app(scope, receive, send_wrapper)
+        else:
+            await self.app(scope, receive, send)
+
+
 app = FastAPI(title="Mission Control Admin Portal")
 
 # Handle X-Forwarded-Proto for HTTPS detection behind reverse proxy (must be first)
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
+# Correlation ID middleware for request tracking
+app.add_middleware(CorrelationIdMiddleware)
 
 # Trust your domain and localhost
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["reburner.io", "www.reburner.io", "localhost", "127.0.0.1"])
@@ -116,10 +154,14 @@ async def admin_login_post(
     """Login handler - multiple vulnerabilities"""
     client_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "")
+    correlation_id = getattr(request.state, "correlation_id", None)
+    
+    # Capture full request body for SQLi payload analysis
+    request_body = {"username": username, "password": password}
     
     # Rate limiting (lax)
     if not check_rate_limit(client_ip):
-        log_login_attempt(client_ip, username, "rate_limited", user_agent)
+        log_login_attempt(client_ip, username, "rate_limited", user_agent, correlation_id, request_body)
         return templates.TemplateResponse("login.html", {
             "request": request,
             "error": "Too many attempts. Please wait.",
@@ -130,7 +172,7 @@ async def admin_login_post(
     user = authenticate(username, password)
     
     if user:
-        log_login_attempt(client_ip, username, "success", user_agent)
+        log_login_attempt(client_ip, username, "success", user_agent, correlation_id, request_body)
         response = RedirectResponse(url="/admin/dashboard", status_code=302)
         token = login_user(response, user["username"], user["is_admin"], request=request)
         response.headers["X-Session-Token"] = token  # Leak token in header (vuln)
@@ -138,7 +180,7 @@ async def admin_login_post(
     
     # Timing attack vector: username enumeration via response time
     # (The authenticate function already does this via SQL)
-    log_login_attempt(client_ip, username, "failed", user_agent)
+    log_login_attempt(client_ip, username, "failed", user_agent, correlation_id, request_body)
     return templates.TemplateResponse("login.html", {
         "request": request,
         "error": "Invalid credentials",
@@ -268,8 +310,9 @@ async def guestbook_post(
     """Handle guestbook submission"""
     client_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "")
+    correlation_id = getattr(request.state, "correlation_id", None)
     
-    result = add_entry(client_ip, name, message, user_agent, website)
+    result = add_entry(client_ip, name, message, user_agent, website, correlation_id)
     
     traps = get_trap_content(request)
     allowed, reason = can_post(client_ip)

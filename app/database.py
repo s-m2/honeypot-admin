@@ -4,8 +4,8 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
-# Use absolute path for database
-DB_DIR = Path("/home/honeypot/app/data")
+# Use configurable path for database - defaults to local data/ for development
+DB_DIR = Path(os.environ.get("HONEYPOT_DATA_DIR", "data"))
 DB_PATH = DB_DIR / "honeypot.db"
 
 SALT = "honeypot-salt-2024"  # In production, use a proper secret
@@ -80,8 +80,23 @@ def _init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             event_type TEXT NOT NULL,
             event_data TEXT,
+            correlation_id TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
+    """)
+    
+    # Migration: add correlation_id column if it doesn't exist (for existing databases)
+    try:
+        cur.execute("ALTER TABLE analytics_events ADD COLUMN correlation_id TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_analytics_correlation ON analytics_events(correlation_id)
+    """)
+    
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_analytics_type ON analytics_events(event_type)
     """)
     
     conn.commit()

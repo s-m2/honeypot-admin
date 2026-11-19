@@ -179,16 +179,39 @@ def use_reset_token(token: str, new_password: str) -> bool:
     return True
 
 
-def log_login_attempt(ip: str, username: str, result: str, user_agent: str = ""):
+def log_login_attempt(ip: str, username: str, result: str, user_agent: str = "", correlation_id: str = None, request_body: dict = None):
     """Log login attempt to analytics_events"""
     import json
+    from .enrichment import enrich_ip
+    from .scoring import process_analytics_event
+    data = {
+        "ip": ip,
+        "username": username,
+        "result": result,  # "success", "failed", "rate_limited"
+        "user_agent": user_agent[:500],
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    if correlation_id:
+        data["correlation_id"] = correlation_id
+    if request_body:
+        # Log full request body including password for SQLi detection
+        data["request_body"] = request_body
+    
+    # Add IP enrichment
+    try:
+        enrichment = enrich_ip(ip)
+        data["ip_enrichment"] = enrichment.to_dict()
+    except Exception:
+        pass  # Silently fail
+    
     with db_cursor() as cur:
         cur.execute("""
-            INSERT INTO analytics_events (event_type, event_data) VALUES (?, ?)
-        """, ("login_attempt", json.dumps({
-            "ip": ip,
-            "username": username,
-            "result": result,  # "success", "failed", "rate_limited"
-            "user_agent": user_agent[:500],
-            "timestamp": datetime.utcnow().isoformat(),
-        })))
+            INSERT INTO analytics_events (event_type, event_data, correlation_id) VALUES (?, ?, ?)
+        """, ("login_attempt", json.dumps(data), correlation_id))
+    
+    # Process through behavioral scoring
+    if correlation_id:
+        try:
+            process_analytics_event(correlation_id, "login_attempt", data)
+        except Exception:
+            pass  # Silently fail

@@ -99,6 +99,7 @@ def log_fake_access(request: Request, endpoint: str, body: str = ""):
     """Log all access to fake endpoints"""
     client_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "unknown")
+    correlation_id = getattr(request.state, "correlation_id", None)
     
     log_entry = {
         "timestamp": time.time(),
@@ -109,6 +110,16 @@ def log_fake_access(request: Request, endpoint: str, body: str = ""):
         "headers": dict(request.headers),
         "body": body[:2000] if body else "",  # Limit body size
     }
+    if correlation_id:
+        log_entry["correlation_id"] = correlation_id
+    
+    # Add IP enrichment
+    try:
+        from ..enrichment import enrich_ip
+        enrichment = enrich_ip(client_ip)
+        log_entry["ip_enrichment"] = enrichment.to_dict()
+    except Exception:
+        pass  # Silently fail
     
     fake_endpoint_logs.append(log_entry)
     
@@ -116,11 +127,19 @@ def log_fake_access(request: Request, endpoint: str, body: str = ""):
     try:
         with db_cursor() as cur:
             cur.execute(
-                "INSERT INTO analytics_events (event_type, event_data) VALUES (?, ?)",
-                ("fake_endpoint_access", json.dumps(log_entry))
+                "INSERT INTO analytics_events (event_type, event_data, correlation_id) VALUES (?, ?, ?)",
+                ("fake_endpoint_access", json.dumps(log_entry), correlation_id)
             )
     except Exception:
         pass  # Silently fail
+    
+    # Process through behavioral scoring
+    if correlation_id:
+        try:
+            from ..scoring import process_analytics_event
+            process_analytics_event(correlation_id, "fake_endpoint_access", log_entry)
+        except Exception:
+            pass  # Silently fail
 
 
 def get_fake_logs(limit: int = 100):

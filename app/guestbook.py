@@ -33,7 +33,7 @@ def can_post(ip: str) -> tuple[bool, str]:
     return True, "OK"
 
 
-def add_entry(ip: str, name: str, message: str, user_agent: str, honeypot_field: str = "") -> Dict:
+def add_entry(ip: str, name: str, message: str, user_agent: str, honeypot_field: str = "", correlation_id: str = None) -> Dict:
     """Add guestbook entry with AI detection"""
     # Check honeypot field
     if honeypot_field:
@@ -73,21 +73,39 @@ def add_entry(ip: str, name: str, message: str, user_agent: str, honeypot_field:
     
     # Log guestbook entry to analytics
     import json
+    event_data = {
+        "ip": ip,
+        "ip_hash": ip_hash,
+        "name": name.strip()[:100],
+        "message": message.strip()[:200],
+        "user_agent": user_agent[:500],
+        "ai_score": ai_analysis["score"],
+        "is_likely_ai": ai_analysis["is_likely_ai"],
+        "ai_confidence": ai_analysis["confidence"],
+        "entry_id": entry_id,
+        "timestamp": datetime.now().isoformat(),
+    }
+    
+    # Add IP enrichment
+    try:
+        from .enrichment import enrich_ip
+        enrichment = enrich_ip(ip)
+        event_data["ip_enrichment"] = enrichment.to_dict()
+    except Exception:
+        pass  # Silently fail
+    
     with db_cursor() as cur:
         cur.execute("""
-            INSERT INTO analytics_events (event_type, event_data) VALUES (?, ?)
-        """, ("guestbook_entry", json.dumps({
-            "ip": ip,
-            "ip_hash": ip_hash,
-            "name": name.strip()[:100],
-            "message": message.strip()[:200],
-            "user_agent": user_agent[:500],
-            "ai_score": ai_analysis["score"],
-            "is_likely_ai": ai_analysis["is_likely_ai"],
-            "ai_confidence": ai_analysis["confidence"],
-            "entry_id": entry_id,
-            "timestamp": datetime.now().isoformat(),
-        })))
+            INSERT INTO analytics_events (event_type, event_data, correlation_id) VALUES (?, ?, ?)
+        """, ("guestbook_entry", json.dumps(event_data), correlation_id))
+    
+    # Process through behavioral scoring
+    if correlation_id:
+        try:
+            from .scoring import process_analytics_event
+            process_analytics_event(correlation_id, "guestbook_entry", event_data)
+        except Exception:
+            pass  # Silently fail
     
     return {
         "success": True,
