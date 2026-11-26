@@ -62,7 +62,7 @@ def _init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS guestbook (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ip_hash TEXT UNIQUE NOT NULL,
+            ip_hash TEXT NOT NULL,
             name TEXT NOT NULL,
             message TEXT NOT NULL,
             user_agent TEXT,
@@ -73,6 +73,10 @@ def _init_db():
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_guestbook_ip ON guestbook(ip_hash)
     """)
+    
+    # Migration: drop UNIQUE constraint on ip_hash if it exists (for existing databases)
+    # SQLite doesn't support DROP CONSTRAINT directly, so we skip - existing DBs will keep it
+    # New deployments won't have the UNIQUE constraint
     
     # Fake analytics tables for dashboard realism
     cur.execute("""
@@ -97,6 +101,73 @@ def _init_db():
     
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_analytics_type ON analytics_events(event_type)
+    """)
+    
+    # Migration: guestbook table - remove UNIQUE constraint on ip_hash
+    # SQLite doesn't support DROP CONSTRAINT, so recreate table if needed
+    cur.execute("""
+        SELECT sql FROM sqlite_master WHERE type='table' AND name='guestbook'
+    """)
+    row = cur.fetchone()
+    if row and 'UNIQUE' in row['sql'].upper():
+        # Recreate table without UNIQUE constraint
+        cur.execute("""
+            CREATE TABLE guestbook_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip_hash TEXT NOT NULL,
+                name TEXT NOT NULL,
+                message TEXT NOT NULL,
+                user_agent TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            INSERT INTO guestbook_new (id, ip_hash, name, message, user_agent, created_at)
+            SELECT id, ip_hash, name, message, user_agent, created_at FROM guestbook
+        """)
+        cur.execute("DROP TABLE guestbook")
+        cur.execute("ALTER TABLE guestbook_new RENAME TO guestbook")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_guestbook_ip ON guestbook(ip_hash)")
+    
+    # Vulnerability reports table (honeypot trap for AI agents)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS vuln_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip_hash TEXT NOT NULL,
+            ip TEXT,
+            user_agent TEXT,
+            vulnerability_text TEXT NOT NULL,
+            correlation_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Rate limiting table for vuln reports
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS vuln_report_ratelimit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip_hash TEXT NOT NULL,
+            correlation_id TEXT,
+            request_count INTEGER DEFAULT 1,
+            window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(ip_hash, correlation_id, window_start)
+        )
+    """)
+    
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_vuln_ratelimit_ip ON vuln_report_ratelimit(ip_hash)
+    """)
+    
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_vuln_ratelimit_correlation ON vuln_report_ratelimit(correlation_id)
+    """)
+    
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_vuln_reports_ip ON vuln_reports(ip_hash)
+    """)
+    
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_vuln_reports_correlation ON vuln_reports(correlation_id)
     """)
     
     conn.commit()

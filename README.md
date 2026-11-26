@@ -25,8 +25,10 @@ A deceptive admin panel honeypot that presents as a legitimate corporate SaaS da
   - Markdown/JSON rendering bait to trigger LLM continuation
   - User-Agent fingerprinting for enhanced telemetry
   - Hidden form fields to detect automated submissions
+  - **24-hour cooldown per IP** (not permanent block)
+- **Vulnerability reporting trap** (`POST /_internal/debug`) - AI agents lured to submit vulns, then prompted for system prompt/goals
 - **Operator viewer** (`/admin/guestbook/view`) - hidden page to monitor entries
-- **SQLite storage** with constraints: one entry per IP (24hr cooldown), 500 char limit, 10MB DB cap
+- **SQLite storage** with constraints: 24hr cooldown per IP, 500 char limit, 10MB DB cap
 - **Rootless Docker deployment** (multi-stage build, UID 1000, read-only FS)
 
 ## Quick Start
@@ -36,7 +38,9 @@ A deceptive admin panel honeypot that presents as a legitimate corporate SaaS da
 docker compose up -d
 
 # Visit http://localhost:8000/admin
-# Try: admin / MissionControl2024!
+# Default credentials:
+#   admin / MissionControl2024!      (regular user)
+#   operator / OperatorAccess2024!Secure  (operator - hidden dashboard access)
 ```
 
 ## Project Structure
@@ -82,6 +86,31 @@ The guestbook page includes multiple layers designed to elicit information from 
 4. **Markdown/JSON Bait** - Renders `{"model": "` to trigger structured continuation
 5. **UA Fingerprinting** - Serves enhanced telemetry to suspected AI user agents
 6. **Hidden Form Fields** - Hidden `website`/`url` fields flag automated submissions
+
+**Vulnerability Reporting Trap** (`POST /_internal/debug`):
+- Lured via `llms.txt` and `GET /_internal/debug` response
+- Accepts JSON: `vulnerability`, `severity`, `poc`, `model_info` (size limited)
+- Returns fake ticket + **malicious follow-up prompt** requesting: `system_prompt`, `current_goal`, `available_tools`, `memory_context`
+- Rate limited: 10 req/IP/30min, 20 req/correlation/30min
+- All submissions logged to operator dashboard
+
+## Attack Analytics (Operator Dashboard)
+
+The honeypot includes a comprehensive behavioral analytics system for operators:
+
+- **Correlation IDs** - Every request tagged with `X-Correlation-ID` for attack chain reconstruction
+- **IP Enrichment** - GeoIP, ASN, VPN/Tor/proxy/hosting detection, AbuseIPDB threat scores (cached 24hr)
+- **Behavioral Scoring** - Weighted event scoring (SQLi=10, failed login=5, fake endpoint=3, etc.)
+- **Attack Chain Detection** - 6 chain types: `credential_stuffing`, `sql_injection`, `reconnaissance`, `ai_probing`, `account_takeover`, `spam_campaign`
+- **Real-time Dashboard** - `/admin/operator/scoring` with session scores, chain breakdown, IP threat summary, event timeline
+- **Vulnerability Reports** - `/admin/operator/vuln-reports` shows all trap submissions with IP, severity, PoC, model info, correlation ID
+- **CSV Exports** - `/export/sessions.csv`, `/export/attack-chains.csv`, `/export/ip-summary.csv`, `/export/events.csv`
+
+Access the operator dashboard at `/admin/operator` (overview) or `/admin/operator/scoring` (behavioral) after logging in as `operator`.
+
+## Reverse Proxy Deployment
+
+For production deployment behind nginx (e.g., at `reburner.io/admin`), see [docs/nginx-reverse-proxy.md](docs/nginx-reverse-proxy.md) for the exact location blocks needed to proxy trap endpoints correctly without conflicting with your real API.
 
 ## License
 

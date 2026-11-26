@@ -226,10 +226,15 @@ class IPEnrichmentService:
 # Global instance
 _enrichment_service: Optional[IPEnrichmentService] = None
 
-def get_enrichment_service() -> IPEnrichmentService:
+def get_enrichment_service(cache_db_path: str = None) -> IPEnrichmentService:
     global _enrichment_service
-    if _enrichment_service is None:
-        _enrichment_service = IPEnrichmentService()
+    if _enrichment_service is None or cache_db_path:
+        if cache_db_path is None:
+            # Use HONEYPOT_DATA_DIR if available
+            import os
+            data_dir = os.environ.get("HONEYPOT_DATA_DIR", "/home/honeypot/app/data")
+            cache_db_path = Path(data_dir) / "ip_cache.db"
+        _enrichment_service = IPEnrichmentService(str(cache_db_path))
     return _enrichment_service
 
 
