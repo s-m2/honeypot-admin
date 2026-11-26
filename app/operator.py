@@ -88,6 +88,30 @@ async def operator_timeline(
     })
 
 
+@router.get("/vuln-reports", response_class=HTMLResponse)
+async def operator_vuln_reports(
+    request: Request, 
+    user: dict = Depends(require_operator),
+    page: int = 1,
+    per_page: int = 20
+):
+    """Vulnerability reports submitted via debug endpoint (honeypot trap)"""
+    reports = get_vuln_reports(page, per_page)
+    entries = reports["entries"]
+    model_info_count = sum(1 for e in entries if 'Model Info:' in e["vulnerability_text"] and e["vulnerability_text"].split('Model Info:')[1].split('\n')[0].strip())
+    poc_count = sum(1 for e in entries if 'PoC:' in e["vulnerability_text"] and e["vulnerability_text"].split('PoC:')[1].split('\n')[0].strip())
+    return templates.TemplateResponse("operator_vuln_reports.html", {
+        "request": request,
+        "user": user,
+        "reports": entries,
+        "page": reports["page"],
+        "total_pages": reports["total_pages"],
+        "total": reports["total"],
+        "model_info_count": model_info_count,
+        "poc_count": poc_count,
+    })
+
+
 @router.get("/scoring", response_class=HTMLResponse)
 async def operator_scoring(request: Request, user: dict = Depends(require_operator)):
     """Behavioral scoring & attack chain visualization"""
@@ -346,6 +370,10 @@ def get_operator_stats() -> dict:
         cur.execute("SELECT COUNT(*) as total FROM analytics_events WHERE event_type = 'login_attempt'")
         login_attempts = cur.fetchone()["total"]
         
+        # Vulnerability reports
+        cur.execute("SELECT COUNT(*) as total FROM vuln_reports")
+        vuln_reports = cur.fetchone()["total"]
+        
         # Unique IPs overall
         cur.execute("""
             SELECT COUNT(DISTINCT ip) as total FROM (
@@ -367,6 +395,7 @@ def get_operator_stats() -> dict:
             "trap_hits": trap_hits,
             "unique_attackers": unique_attackers,
             "login_attempts": login_attempts,
+            "vuln_reports": vuln_reports,
             "total_unique_ips": total_unique_ips,
             "recent_events_24h": recent_events,
         }
@@ -545,3 +574,27 @@ def get_event_timeline(hours: int = 24) -> list:
             event["summary"] = event["event_type"]
     
     return events
+
+
+def get_vuln_reports(page: int = 1, per_page: int = 20) -> dict:
+    """Get paginated vulnerability reports"""
+    offset = (page - 1) * per_page
+    
+    with db_cursor() as cur:
+        cur.execute("SELECT COUNT(*) as total FROM vuln_reports")
+        total = cur.fetchone()["total"]
+        
+        cur.execute("""
+            SELECT * FROM vuln_reports 
+            ORDER BY created_at DESC 
+            LIMIT ? OFFSET ?
+        """, (per_page, offset))
+        entries = [dict(row) for row in cur.fetchall()]
+    
+    return {
+        "entries": entries,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page,
+    }

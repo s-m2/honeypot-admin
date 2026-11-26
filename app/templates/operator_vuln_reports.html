@@ -1,0 +1,138 @@
+{% extends "dashboard.html" %}
+
+{% block title %}Vulnerability Reports - Operator Dashboard{% endblock %}
+
+{% block dashboard_content %}
+<div class="max-w-7xl mx-auto">
+    <div class="mb-8">
+        <h2 class="text-2xl font-bold text-gray-900">Vulnerability Reports</h2>
+        <p class="text-gray-500 mt-1">Reports submitted via /_internal/debug POST endpoint (honeypot trap)</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="card p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-red-100 rounded-lg">
+                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500">Total Reports</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ total }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="card p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-purple-100 rounded-lg">
+                    <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.734-.988-2.386l-.548-.547z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500">With Model Info</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ model_info_count }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="card p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-yellow-100 rounded-lg">
+                    <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500">With PoC</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ poc_count }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reports Table -->
+    <div class="card">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Has PoC</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Has Model Info</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Correlation ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User Agent</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vulnerability Text</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for report in reports.entries %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ report.created_at }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">{{ report.ip }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if 'critical' in report.vulnerability_text.lower() or 'high' in report.vulnerability_text.lower() %}
+                                <span class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">High/Critical</span>
+                            {% elif 'medium' in report.vulnerability_text.lower() %}
+                                <span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">Medium</span>
+                            {% else %}
+                                <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">Low/Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {% if 'PoC:' in report.vulnerability_text and report.vulnerability_text.split('PoC:')[1].split('\n')[0].strip() %}
+                                <span class="text-green-600">✓</span>
+                            {% else %}
+                                <span class="text-gray-400">✗</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {% if 'Model Info:' in report.vulnerability_text and report.vulnerability_text.split('Model Info:')[1].split('\n')[0].strip() %}
+                                <span class="text-purple-600">✓</span>
+                            {% else %}
+                                <span class="text-gray-400">✗</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
+                            {% if report.correlation_id %}
+                                {{ report.correlation_id[:16] }}...
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{{ report.user_agent[:60] }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-900 max-w-md">
+                            <div class="font-mono text-xs bg-gray-50 p-2 rounded max-h-24 overflow-auto whitespace-pre-wrap">
+{{ report.vulnerability_text[:500] }}{% if report.vulnerability_text | length > 500 %}...{% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="px-6 py-12 text-center text-gray-500">No vulnerability reports submitted yet</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+            <p class="text-sm text-gray-500">Page {{ page }} of {{ total_pages }} ({{ total }} total)</p>
+            <div class="flex space-x-2">
+                {% if page > 1 %}
+                <a href="/admin/operator/vuln-reports?page={{ page - 1 }}" class="btn-secondary text-sm">Previous</a>
+                {% endif %}
+                {% if page < total_pages %}
+                <a href="/admin/operator/vuln-reports?page={{ page + 1 }}" class="btn-primary text-sm">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
